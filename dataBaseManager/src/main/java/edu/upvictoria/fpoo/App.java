@@ -10,9 +10,9 @@ public class App
 {
     public static void main( String[] args )
     {
-        Entrada obj = new Entrada();
-        
-        obj.evaluar();
+        Entrada sentencia = new Entrada();
+
+        sentencia.evaluar();
 
     }
 }
