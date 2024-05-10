@@ -20,7 +20,7 @@ public class Entrada {
     private String ruta = "/home/yisuscena/Escritorio/baseDatos";
     private ManejoArchivo archivo = new ManejoArchivo();
     private String[] dataTypes = { " INT", "\tINT", "\tVARCHAR", " VARCHAR" };
-    private String[] keywords = {" NOT", "\tNOT", " NULL", "\tNULL",
+    private String[] keywords = {" INT", "\tINT", "\tVARCHAR", " VARCHAR", " NOT", "\tNOT", " NULL", "\tNULL",
             " PRIMARY", "\tPRIMARY", " KEY", "\tKEY" };
 
     public void evaluar() throws InvalidSentenceFormatException, InvalidTableNameException, PathIsNullException {
@@ -53,7 +53,18 @@ public class Entrada {
                 throw new InvalidSentenceFormatException();
             }
             showTables();
-        } 
+        }else if(contenido.contains("DROP ") || contenido.contains("DROP\t")){
+            if(ruta.isBlank()){
+                throw new PathIsNullException();
+            }
+            if(!(validar(contenido, "DROP"))){
+                throw new InvalidSentenceFormatException();
+            }
+            if(!(validarTWS(contenido, "DROP", "TABLE"))){
+                throw new InvalidSentenceFormatException();
+            }
+            dropTable(contenido.toUpperCase());
+        }
         else {
             throw new InvalidSentenceFormatException();
         }
@@ -73,6 +84,25 @@ public class Entrada {
             return false;
         }
         return true;
+    }
+
+    private void dropTable(String contenido){
+        String ubicacion, ubicacionOculta;
+        ubicacion = ruta + File.separator +  contenido.substring(contenido.indexOf("TABLE") + 5, contenido.length()-1).trim() + ".csv";
+        ubicacionOculta = ruta + File.separator + "." + contenido.substring(contenido.indexOf("TABLE") + 5, contenido.length()-1).trim() + ".csv";
+        System.out.println(ubicacion);
+        try {
+            archivo.existeDirectorio(ubicacion);
+        } catch (Exception e) {
+            System.out.println("El archivo no existe");
+        }
+        System.out.println("La tabla se borrara permanentemente desea continuar S/n  ");
+        if(input.entradaString().toUpperCase().equals("S")){
+            File file = new File(ubicacion);
+            file.delete();
+            file = new File(ubicacionOculta);
+            file.delete();
+        }
     }
 
     private void useFuncion(String contenido) throws InvalidSentenceFormatException {
@@ -118,6 +148,7 @@ public class Entrada {
             throw new InvalidSentenceFormatException();
         }
     }
+    
 
     private void validarAtributo(String contenido, ArrayList<ArrayList<String>> listaPadre) throws InvalidSentenceFormatException {
         boolean bandera = false;
@@ -135,15 +166,15 @@ public class Entrada {
             }
             bandera = false;
             for (int i = 2; i < a.size(); i++) {
-                if(i+1 >= a.size()){
+                if(i+1 < a.size()){
                     for(int j = i+1; j<a.size(); j++){
                         if(a.get(i).equals(a.get(j))){
                             throw new InvalidSentenceFormatException();
                         }
                     }
                 }
-                for (String b : keywords) {
-                    if (a.get(i).equals(b.trim())) {
+                for (int j = 4; j<keywords.length; j++ ) {
+                    if (a.get(i).equals(keywords[j].trim())) {
                         bandera = true;
                         break;
                     }
