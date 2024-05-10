@@ -3,75 +3,215 @@ package edu.upvictoria.fpoo.Entrada;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 
 import edu.upvictoria.fpoo.Input;
 import edu.upvictoria.fpoo.ManejoArchivo;
+import edu.upvictoria.fpoo.Atributos.Tabla;
 import edu.upvictoria.fpoo.Exceptions.InvalidSentenceFormatException;
+import edu.upvictoria.fpoo.Exceptions.InvalidTableNameException;
+import edu.upvictoria.fpoo.Exceptions.PathIsNullException;
 
 public class Entrada {
 
     private Input input = new Input();
-    private String ruta;
+    private Tabla tabla = new Tabla();
+    //Quitar la inicializacón
+    private String ruta = "/home/yisuscena/Escritorio/baseDatos";
     private ManejoArchivo archivo = new ManejoArchivo();
+    private String[] dataTypes = { " INT", "\tINT", "\tVARCHAR", " VARCHAR" };
+    private String[] keywords = {" NOT", "\tNOT", " NULL", "\tNULL",
+            " PRIMARY", "\tPRIMARY", " KEY", "\tKEY" };
 
-    public void evaluar() throws InvalidSentenceFormatException {
+    public void evaluar() throws InvalidSentenceFormatException, InvalidTableNameException, PathIsNullException {
         String contenido = consulta();
-        if (contenido.contains("USE")) {
-            if (!(validar(contenido, "USE",0))) {
+        if (contenido.contains("USE ") || contenido.contains("USE\t")) {
+            if (!(validar(contenido, "USE"))) {
                 throw new InvalidSentenceFormatException();
             }
             useFuncion(contenido);
-        }else if(contenido.contains("CREATE")){
-            if(!(contenido.contains("TABLE")) || !(validar(contenido, "CREATE",0))){
+        } else if (contenido.contains("CREATE ") || contenido.contains("CREATE\t")) {
+            if(ruta.isBlank()){
+                throw new PathIsNullException();
+            }
+            if (!(validar(contenido, "CREATE"))
+                    || (!(contenido.contains("TABLE\t")) && !(contenido.contains("TABLE ")))) {
                 throw new InvalidSentenceFormatException();
             }
-            if(!(validarTWS(contenido, "CREATE", "TABLE", contenido.indexOf("CREATE") + 6))){
+            if (!(validarTWS(contenido, "CREATE", "TABLE"))) {
                 throw new InvalidSentenceFormatException();
-            }   
-            
+            }
+            createTable(contenido);
+        }else if(contenido.contains("SHOW ") || contenido.contains("SHOW\t")){
+            if(ruta.isBlank()){
+                throw new PathIsNullException();
+            }
+            if(!(validar(contenido, "SHOW"))){
+                throw new InvalidSentenceFormatException();
+            }
+            if(!(validarTWS(contenido, "SHOW", "TABLES"))){
+                throw new InvalidSentenceFormatException();
+            }
+            showTables();
+        } 
+        else {
+            throw new InvalidSentenceFormatException();
         }
-        
     }
 
-    private boolean validarTWS(String contenido, String keyWordOne, String keyWordTwo, int inicioBusqueda){
-
-        if((contenido.indexOf(keyWordOne) + keyWordOne.length()) == (contenido.indexOf(keyWordTwo))){
+    private boolean validarTWS(String contenido, String keyWordOne, String keyWordTwo) {
+        contenido = contenido.trim();
+        if ((contenido.indexOf(keyWordOne) + keyWordOne.length()) == (contenido.indexOf(keyWordTwo))) {
             return false;
         }
-
-        return validar(contenido, keyWordTwo, inicioBusqueda);
-
+        return validar(contenido.substring(keyWordOne.length()), keyWordTwo);
     }
 
-    private boolean validar(String contenido, String keyword, int inicioBusqueda) {
+    private boolean validar(String contenido, String keyword) {
+        contenido = contenido.trim();
         if (contenido.indexOf(keyword) != 0) {
-            for (int i = contenido.indexOf(keyword); i > inicioBusqueda; i--) {
-                if (!(contenido.substring(contenido.indexOf(keyword) - i, contenido.indexOf(keyword) - i + 1)
-                        .equals(" "))
-                        && !(contenido.substring(contenido.indexOf(keyword) - i, contenido.indexOf(keyword) - i + 1)
-                                .equals("\t"))) {
-                    return false;
-                }
-            }
+            return false;
         }
         return true;
     }
 
-    private void useFuncion(String contenido) {
-        contenido = contenido.substring(contenido.indexOf(File.separator), contenido.length() - 1);
+    private void useFuncion(String contenido) throws InvalidSentenceFormatException {
+        contenido = contenido.substring(3, contenido.length() - 1).trim();
         try {
             archivo.existeDirectorio(contenido);
             ruta = contenido;
             System.out.println(ruta);
         } catch (IOException e) {
-            System.out.println("El directorio no existe");
+            throw new InvalidSentenceFormatException();
         }
     }
 
-    private void createTable(String contenido){
+    private void showTables(){
+        System.out.println();
+        File file = new File(ruta);
+        File[] archivos = file.listFiles();
+        for(File a : archivos){
+            if(!(a.getName().indexOf(".") == 0)){
+                System.out.println(a.getName().substring(0,a.getName().indexOf(".csv")));
+            }
+            
+        }
+    }
 
+    private void createTable(String contenido) throws InvalidTableNameException {
+        ArrayList<ArrayList<String>> listaPadre = new ArrayList<>();
+        boolean key = false , isNull = false;
+        if (contenido.contains("(") && contenido.contains(")")) {
+            String nombre = validateName(contenido.substring(contenido.indexOf("TABLE") + 5, contenido.indexOf("(")).trim().toUpperCase());
+            validarAtributo(contenido.substring(contenido.indexOf("(") + 1, contenido.indexOf(")")), listaPadre);
+            for(ArrayList<String> a : listaPadre){
+                if(a.contains("NULL")){
+                    isNull = true;
+                }
+                if(a.contains("PRIMARY") && a.contains("KEY")){
+                    key = true;
+                }
+                tabla.crearAtributo(nombre, a.get(0), a.get(1), isNull, key, a);
+            }
+            tabla.crearTabla(ruta);
+        } else {
+            throw new InvalidSentenceFormatException();
+        }
+    }
 
+    private void validarAtributo(String contenido, ArrayList<ArrayList<String>> listaPadre) throws InvalidSentenceFormatException {
+        boolean bandera = false;
+        String temp = "";
+        partirAtributo(contenido, listaPadre);
+        for (ArrayList<String> a : listaPadre) {
+            a.set(0, validateName(a.get(0).toUpperCase()));
+            for (String c : dataTypes) {
+                if (a.get(1).equals(c.trim())) {
+                    bandera = true;
+                }
+            }
+            if (!bandera) {
+                throw new InvalidSentenceFormatException();
+            }
+            bandera = false;
+            for (int i = 2; i < a.size(); i++) {
+                if(i+1 >= a.size()){
+                    for(int j = i+1; j<a.size(); j++){
+                        if(a.get(i).equals(a.get(j))){
+                            throw new InvalidSentenceFormatException();
+                        }
+                    }
+                }
+                for (String b : keywords) {
+                    if (a.get(i).equals(b.trim())) {
+                        bandera = true;
+                        break;
+                    }
+                }
+                if (!bandera) {
+                    throw new InvalidSentenceFormatException();
+                }
+                bandera = false;
+            }
+            System.out.println(a);
+        }
+    }
 
+    private void partirAtributo(String contenido, ArrayList<ArrayList<String>> listaPadre)
+            throws InvalidSentenceFormatException {
+        boolean bandera = false;
+        if(contenido.isBlank()){
+            throw new InvalidSentenceFormatException();
+        }
+        contenido = contenido + ",";
+        String[] raw = contenido.split(",");
+        for (String a : raw) {
+            ArrayList<String> lista = new ArrayList<>();
+            int temp = 0;
+            for (String b : keywords) {
+                if (a.contains(b)) {
+                    try {
+                        lista.add(a.substring(temp, a.indexOf(b)).trim());
+                    } catch (StringIndexOutOfBoundsException e) {
+                        throw new InvalidSentenceFormatException();
+                    }
+                    temp += a.substring(temp, a.indexOf(b)).length();
+                    bandera = true;
+                }
+            }
+            if (bandera) {
+                lista.add(a.substring(temp).trim());
+                listaPadre.add(lista);
+            }else{
+                throw new InvalidSentenceFormatException();
+            }
+        }
+    }
+
+    private String validateName(String contenido) {
+        boolean bandera = false;
+        String temp = archivo.fileToString("LegalCharacters.csv");
+        String[] caracter = temp.split(",");
+        temp = archivo.fileToString("IllegalWords.csv");
+        String[] palabras = temp.split(",");
+        for (String a : palabras) {
+            if (contenido.equals(a)) {
+                throw new InvalidTableNameException();
+            }
+        }
+        for (int i = 0; i < contenido.length(); i++) {
+            for (int j = 0; j < caracter.length; j++) {
+                if (new String(new char[]{contenido.charAt(i)}).equals(caracter[j])) {
+                    bandera = true;
+                    break;
+                }
+            }
+            if (!bandera) {
+                throw new InvalidTableNameException();
+            }
+            bandera = false;
+        }
+        return contenido;
     }
 
     private String consulta() {
